@@ -85,9 +85,9 @@ static void usb_mouse_irq(struct urb *urb)
 	input_report_rel(dev, REL_Y,     data[2]);
 	input_report_rel(dev, REL_WHEEL, data[3]);
 
-	input_sync(dev);
+	input_sync(dev);  //提交鼠标数据并同步
 resubmit:
-	status = usb_submit_urb (urb, GFP_ATOMIC);
+	status = usb_submit_urb (urb, GFP_ATOMIC);  //提交urb 告诉主机有数据可以读
 	if (status)
 		err ("can't resubmit intr, %s-%s/input0, status %d",
 				mouse->usbdev->bus->bus_name,
@@ -122,16 +122,16 @@ static int usb_mouse_probe(struct usb_interface *intf, const struct usb_device_i
 	int pipe, maxp;
 	int error = -ENOMEM;
 
-	interface = intf->cur_altsetting;
+	interface = intf->cur_altsetting;  //获取当前usb设备的接口描述符
 
 	if (interface->desc.bNumEndpoints != 1)
 		return -ENODEV;
 
-	endpoint = &interface->endpoint[0].desc;
-	if (!usb_endpoint_is_int_in(endpoint))
+	endpoint = &interface->endpoint[0].desc;  //获取当前端点描述符，此处 endpoint[0]，并不是第0个端点。而是除端点0 以外的第0 个端点。
+	if (!usb_endpoint_is_int_in(endpoint))  //如果不是中断输入类型端点，出错返回。  根据usb_endpoint_descriptor->bmAttributes 判断
 		return -ENODEV;
 
-	pipe = usb_rcvintpipe(dev, endpoint->bEndpointAddress);
+	pipe = usb_rcvintpipe(dev, endpoint->bEndpointAddress);  //usb 设备数据传输的源  （管道传输）  //整数pipe-包含端点的类型，设备地址和端点地址，端点的方向
 	maxp = usb_maxpacket(dev, pipe, usb_pipeout(pipe));
 
 	mouse = kzalloc(sizeof(struct usb_mouse), GFP_KERNEL);
@@ -139,11 +139,11 @@ static int usb_mouse_probe(struct usb_interface *intf, const struct usb_device_i
 	if (!mouse || !input_dev)
 		goto fail1;
 
-	mouse->data = usb_buffer_alloc(dev, 8, GFP_ATOMIC, &mouse->data_dma);
+	mouse->data = usb_buffer_alloc(dev, 8, GFP_ATOMIC, &mouse->data_dma);  //usb 设备数据传输的目的
 	if (!mouse->data)
 		goto fail1;
 
-	mouse->irq = usb_alloc_urb(0, GFP_KERNEL);
+	mouse->irq = usb_alloc_urb(0, GFP_KERNEL);  //分配一个urb ，usb的传输单元  -mouse->irq，并不是真正的中断，usb数据是查询方式传输
 	if (!mouse->irq)
 		goto fail2;
 
@@ -186,9 +186,9 @@ static int usb_mouse_probe(struct usb_interface *intf, const struct usb_device_i
 	input_dev->open = usb_mouse_open;
 	input_dev->close = usb_mouse_close;
 
-	usb_fill_int_urb(mouse->irq, dev, pipe, mouse->data,
+	usb_fill_int_urb(mouse->irq, dev, pipe, mouse->data,  //使用3要素填充 urb
 			 (maxp > 8 ? 8 : maxp),
-			 usb_mouse_irq, mouse, endpoint->bInterval);
+			 usb_mouse_irq, mouse, endpoint->bInterval);  //endpoint->bInterval---usb数据传输查询频率
 	mouse->irq->transfer_dma = mouse->data_dma;
 	mouse->irq->transfer_flags |= URB_NO_TRANSFER_DMA_MAP;
 

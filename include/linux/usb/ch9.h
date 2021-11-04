@@ -298,7 +298,7 @@ struct usb_interface_descriptor {
 
 	__u8  bInterfaceNumber;
 	__u8  bAlternateSetting;
-	__u8  bNumEndpoints;
+	__u8  bNumEndpoints;  //除了端点0之外，还有多少个端点，端点0 是每个设备都有的，用来控制传输，可以双向传输，其他端点只能单向传输
 	__u8  bInterfaceClass;
 	__u8  bInterfaceSubClass;
 	__u8  bInterfaceProtocol;
