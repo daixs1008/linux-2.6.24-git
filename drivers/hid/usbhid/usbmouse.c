@@ -46,13 +46,13 @@ MODULE_DESCRIPTION(DRIVER_DESC);
 MODULE_LICENSE(DRIVER_LICENSE);
 
 struct usb_mouse {
-	char name[128];
+	char name[128];  //名字，一般存储制造商的名称
 	char phys[64];
-	struct usb_device *usbdev;
-	struct input_dev *dev;
-	struct urb *irq;
+	struct usb_device *usbdev;  //usb 设备模型
+	struct input_dev *dev;  //输入设备
+	struct urb *irq;  //用于usb 设备通信的urb 模块
 
-	signed char *data;
+	signed char *data;  //usb 鼠标事件的buffer ，存储鼠标的左键，右键，滑轮，坐标事件
 	dma_addr_t data_dma;
 };
 
@@ -124,21 +124,24 @@ static int usb_mouse_probe(struct usb_interface *intf, const struct usb_device_i
 
 	interface = intf->cur_altsetting;  //获取当前usb设备的接口描述符
 
-	if (interface->desc.bNumEndpoints != 1)
+	if (interface->desc.bNumEndpoints != 1)  //判断鼠标设备只有一个端点（除了端点0）
 		return -ENODEV;
 
 	endpoint = &interface->endpoint[0].desc;  //获取当前端点描述符，此处 endpoint[0]，并不是第0个端点。而是除端点0 以外的第0 个端点。
 	if (!usb_endpoint_is_int_in(endpoint))  //如果不是中断输入类型端点，出错返回。  根据usb_endpoint_descriptor->bmAttributes 判断
 		return -ENODEV;
-
+	//创建中断输入管道，鼠标属于中断控制，
 	pipe = usb_rcvintpipe(dev, endpoint->bEndpointAddress);  //usb 设备数据传输的源  （管道传输）  //整数pipe-包含端点的类型，设备地址和端点地址，端点的方向
+	//返回该端点能够传输的最大包长度，鼠标的返回的最大数据包长度为4个字节
+	//初始化urb 的时候会用到这个长度，缓冲区的长度要依照maxp 来确定，最大不能超过8
 	maxp = usb_maxpacket(dev, pipe, usb_pipeout(pipe));
 
-	mouse = kzalloc(sizeof(struct usb_mouse), GFP_KERNEL);
-	input_dev = input_allocate_device();
+	mouse = kzalloc(sizeof(struct usb_mouse), GFP_KERNEL);  //为mouse 申请内存，mouse 结构的主要作用是赋值给usb_interface中的一个属性，这个属性存储用户需要的数据
+	input_dev = input_allocate_device();//创建input设备
 	if (!mouse || !input_dev)
 		goto fail1;
 
+	//为urb 的传输申请内存，data指向该地址空间，初始化urb缓冲区，
 	mouse->data = usb_buffer_alloc(dev, 8, GFP_ATOMIC, &mouse->data_dma);  //usb 设备数据传输的目的
 	if (!mouse->data)
 		goto fail1;
@@ -170,25 +173,35 @@ static int usb_mouse_probe(struct usb_interface *intf, const struct usb_device_i
 
 	input_dev->name = mouse->name;
 	input_dev->phys = mouse->phys;
+	//从设备中获取总线类型，设备id，厂商id，版本号，设置父设备，
 	usb_to_input_id(dev, &input_dev->id);
 	input_dev->dev.parent = &intf->dev;
 
+	//设置输入事件所支持的事件信息  
+	//支持坐标和事件
 	input_dev->evbit[0] = BIT_MASK(EV_KEY) | BIT_MASK(EV_REL);
+	//记录支持的按键值
 	input_dev->keybit[BIT_WORD(BTN_MOUSE)] = BIT_MASK(BTN_LEFT) |
 		BIT_MASK(BTN_RIGHT) | BIT_MASK(BTN_MIDDLE);
+	//记录支持的相对坐标为鼠标移动坐标和滑轮的坐标
 	input_dev->relbit[0] = BIT_MASK(REL_X) | BIT_MASK(REL_Y);
 	input_dev->keybit[BIT_WORD(BTN_MOUSE)] |= BIT_MASK(BTN_SIDE) |
 		BIT_MASK(BTN_EXTRA);
 	input_dev->relbit[0] |= BIT_MASK(REL_WHEEL);
 
+	//将mouse传入 input_dev，方面通过input_dev获取全部的mouse信息
 	input_set_drvdata(input_dev, mouse);
 
+	//设置输入设备的 open和close 函数
 	input_dev->open = usb_mouse_open;
 	input_dev->close = usb_mouse_close;
 
+	//填充urb模块，mouse作为上下文被设置，另外usb_mouse_irq 被作为回调函数   
+	//当usb mouse有事件产生时，回调函数被调用
 	usb_fill_int_urb(mouse->irq, dev, pipe, mouse->data,  //使用3要素填充 urb
 			 (maxp > 8 ? 8 : maxp),
 			 usb_mouse_irq, mouse, endpoint->bInterval);  //endpoint->bInterval---usb数据传输查询频率
+	//mouse->irq 就是urb，如下设置DMA传输相关，跟据flag为 URB_NO_TRANSFER_DMA_MAP 时，判断优先使用 transfer_dma  或 transfer buffer 
 	mouse->irq->transfer_dma = mouse->data_dma;
 	mouse->irq->transfer_flags |= URB_NO_TRANSFER_DMA_MAP;
 
@@ -196,7 +209,7 @@ static int usb_mouse_probe(struct usb_interface *intf, const struct usb_device_i
 	if (error)
 		goto fail3;
 
-	usb_set_intfdata(intf, mouse);
+	usb_set_intfdata(intf, mouse);  //注册mouse 到 usb_interface 中
 	return 0;
 
 fail3:	
