@@ -1547,6 +1547,7 @@ s32 i2c_smbus_xfer(struct i2c_adapter * adapter, u16 addr, unsigned short flags,
 
 	return res;
 }
+
 EXPORT_SYMBOL(i2c_smbus_xfer);
 
 MODULE_AUTHOR("Simon G. Vogl <simon@tk.uni-linz.ac.at>");
